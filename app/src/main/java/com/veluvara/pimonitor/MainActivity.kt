@@ -78,11 +78,17 @@ class MainActivity : Activity() {
         val fresh=entries.count { System.currentTimeMillis()-prefs.getLong("endpoint:$it:checked",0)<(prefs.getInt("minutes",3)+2)*60000L }
         val good=entries.count { prefs.getString("endpoint:$it:result","")=="ok" }
         val issues=entries.count { prefs.getBoolean("endpoint:$it:incident",false) }
-        val title=when { entries.isEmpty()->"Добавим первый сервис"; !active->"Мониторинг на паузе"; issues>0->"Нужно внимание"; fresh==entries.size && good==entries.size->"Сервисы отвечают"; else->"Ожидаем свежие данные" }
+        val deviceConfigured=prefs.getString("device_url", "")!!.isNotBlank()
+        val deviceFresh=runCatching {
+            val d=org.json.JSONObject(prefs.getString("device_json", "")!!)
+            System.currentTimeMillis()/1000-d.getLong("collected_at")<180 && !d.optBoolean("stale",true) && prefs.getString("device_error", "")!!.isBlank()
+        }.getOrDefault(false)
+        val deviceIssue=prefs.getString("device_alert", "")!!.isNotBlank() || prefs.getInt("device_failures",0)>=3
+        val title=when { entries.isEmpty() && !deviceConfigured->"Добавим первый сервис"; !active->"Мониторинг на паузе"; issues>0 || deviceIssue->"Нужно внимание"; fresh==entries.size && good==entries.size && (!deviceConfigured || deviceFresh)->"Сервисы отвечают"; else->"Ожидаем свежие данные" }
         val hero=card(color=Color.parseColor(if(dark) "#163D30" else "#DCECE1"))
         hero.addView(text(if(active) "●  МОНИТОРИНГ ВКЛЮЧЁН" else "○  МОНИТОРИНГ ВЫКЛЮЧЕН",11f,accent,true))
         hero.addView(text(title,25f,ink,true))
-        hero.addView(text(if(entries.isEmpty()) "Укажите адрес проверки в настройках." else "${entries.size} сервисов · каждые ${prefs.getInt("minutes",3)} мин\nОпрос при разблокированном экране",14f,muted))
+        hero.addView(text(if(entries.isEmpty() && !deviceConfigured) "Укажите адрес проверки в настройках." else "${entries.size} сервисов · каждые ${prefs.getInt("minutes",3)} мин\nОпрос при разблокированном экране",14f,muted))
         button(hero,if(active) "Приостановить" else "Включить мониторинг",true) {
             if(active) { stopService(Intent(this,MonitorService::class.java)); handler.postDelayed({ render() },200) }
             else if(entries.isEmpty() && prefs.getString("device_url", "")!!.isBlank()) { page=2; render() } else start()

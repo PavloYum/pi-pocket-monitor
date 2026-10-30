@@ -113,7 +113,11 @@ class MonitorService : Service() {
             conn=URL(url).openConnection() as HttpURLConnection
             conn.connectTimeout=5000; conn.readTimeout=5000; conn.instanceFollowRedirects=false
             if(conn.responseCode!=200) throw IllegalStateException("HTTP")
-            val raw=conn.inputStream.bufferedReader().use { it.readText() }
+            val bytes=conn.inputStream.use { input ->
+                val out=java.io.ByteArrayOutputStream(); val buffer=ByteArray(4096)
+                while(true) { val n=input.read(buffer); if(n<0) break; if(out.size()+n>262144) throw IllegalStateException("Size"); out.write(buffer,0,n) }; out.toByteArray()
+            }
+            val raw=String(bytes,Charsets.UTF_8)
             if(raw.length>262144) throw IllegalStateException("Size")
             val data=org.json.JSONObject(raw)
             if(data.getInt("schema")!=1) throw IllegalStateException("Schema")
@@ -124,6 +128,7 @@ class MonitorService : Service() {
             val previous=prefs.getString("device_alert", "")!!
             if(signature.isNotEmpty() && signature!=previous) { alert(50,"Pi: $signature"); log("Pi: $signature") }
             if(signature.isEmpty() && previous.isNotEmpty()) { alert(50,"Pi: показатели вернулись в норму"); log("Восстановление: Pi") }
+            if(prefs.getInt("device_failures",0)>=3) { alert(51,"Связь с мониторингом Pi восстановлена"); log("Восстановление: связь с Pi") }
             prefs.edit().putString("device_json",raw).putLong("device_checked",System.currentTimeMillis()).putString("device_error", "").putInt("device_failures",0).putString("device_alert",signature).apply()
         } catch(e:Exception) {
             val count=prefs.getInt("device_failures",0)+1
