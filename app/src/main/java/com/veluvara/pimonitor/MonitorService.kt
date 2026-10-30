@@ -12,6 +12,7 @@ import java.util.Date
 import java.util.Locale
 
 class MonitorService : Service() {
+    companion object { @Volatile var active=false; private set }
     private val handler=Handler(Looper.getMainLooper())
     private val worker=Executors.newSingleThreadExecutor()
     private var busy=false
@@ -50,6 +51,7 @@ class MonitorService : Service() {
         if(intent?.action=="STOP") { stopSelf(); return START_NOT_STICKY }
         val n=Notification.Builder(this,"service").setSmallIcon(android.R.drawable.ic_menu_info_details).setContentTitle("Мониторинг включён").setContentText("Опрос только при разблокированном экране").setOngoing(true).addAction(Notification.Action.Builder(null,"Остановить",stop).build()).build()
         startForeground(1,n)
+        active=true
         handler.removeCallbacks(tick); handler.post(tick)
         return START_NOT_STICKY
     }
@@ -82,7 +84,9 @@ class MonitorService : Service() {
             } catch(e:Exception) { Pair(false,"Нет ответа") } finally { connection?.disconnect() }
             if(stopped || !unlocked()) return
             val key="endpoint:$endpoint"; val incident=prefs.getBoolean("$key:incident",false)
+            prefs.edit().putLong("$key:checked",System.currentTimeMillis()).putString("$key:result",if(result.first) "ok" else if(!internet) "network" else "error").apply()
             if(result.first) {
+                if(incident) log("Восстановление: проверка ${index+1}")
                 if(incident) alert(100+index,"Проверка ${index+1}: доступ восстановлен")
                 prefs.edit().putInt("$key:failures",0).putBoolean("$key:incident",false).apply()
                 log("Проверка ${index+1}: ${result.second}")
@@ -100,6 +104,6 @@ class MonitorService : Service() {
             }
         }
     }
-    override fun onDestroy() { stopped=true; handler.removeCallbacks(tick); unregisterReceiver(receiver); worker.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() { active=false; stopped=true; handler.removeCallbacks(tick); unregisterReceiver(receiver); worker.shutdownNow(); super.onDestroy() }
     override fun onBind(intent:Intent?) : IBinder?=null
 }

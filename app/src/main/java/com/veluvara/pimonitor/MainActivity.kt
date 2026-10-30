@@ -1,42 +1,135 @@
 package com.veluvara.pimonitor
 
 import android.app.Activity
-import android.os.Bundle
-import android.os.Build
-import android.content.Intent
+import android.os.*
+import android.content.*
+import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.view.*
 import android.widget.*
 import java.net.URI
+import java.text.SimpleDateFormat
+import java.util.*
 
 class MainActivity : Activity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
+    private val prefs by lazy { getSharedPreferences("monitor", MODE_PRIVATE) }
+    private var page=0
+    private lateinit var content: LinearLayout
+    private val handler=Handler(Looper.getMainLooper())
+    private val refresh=object:Runnable { override fun run() { if(page!=2) render(); handler.postDelayed(this,3000) } }
+    private val dark get()=(resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES
+    private val bg get()=Color.parseColor(if(dark) "#101917" else "#F2F5F1")
+    private val surface get()=Color.parseColor(if(dark) "#1C2925" else "#FFFFFF")
+    private val ink get()=Color.parseColor(if(dark) "#E6EEE8" else "#18362C")
+    private val muted get()=Color.parseColor(if(dark) "#A9BDB1" else "#667A70")
+    private val accent=Color.parseColor("#238260")
+    private fun dp(n:Int)=(n*resources.displayMetrics.density).toInt()
+    private fun shape(color:Int,r:Int=22)=GradientDrawable().apply { setColor(color); cornerRadius=dp(r).toFloat() }
+    private fun text(value:String,size:Float=15f,color:Int=ink,bold:Boolean=false)=TextView(this).apply {
+        text=value; textSize=size; setTextColor(color); setPadding(0,dp(5),0,dp(5)); if(bold) typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
+    }
+    private fun column()=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+    private fun card(parent:LinearLayout=content,color:Int=surface)=column().apply {
+        background=shape(color); setPadding(dp(20),dp(16),dp(20),dp(16))
+        parent.addView(this,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(14) })
+    }
+    private fun button(parent:LinearLayout,title:String,primary:Boolean=false,action:()->Unit) {
+        parent.addView(Button(this).apply {
+            text=title; isAllCaps=false; textSize=15f; setTextColor(if(primary) Color.WHITE else ink)
+            background=shape(if(primary) accent else bg,14)
+            setOnClickListener { action() }
+        },LinearLayout.LayoutParams(-1,dp(52)).apply { topMargin=dp(12) })
+    }
+    override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
-        val prefs = getSharedPreferences("monitor", MODE_PRIVATE)
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32,48,32,24) }
-        val scroll = ScrollView(this).apply { addView(box) }; setContentView(scroll)
-        fun label(s: String) { box.addView(TextView(this).apply { text=s; textSize=18f; setPadding(0,16,0,16) }) }
-        label("Pi Pocket Monitor · 0.1.0")
-        label("Проверки работают после включения мониторинга, пока телефон разблокирован. При выключенном экране опрос прекращается.")
-        label("Адреса проверки, по одному на строку. Каждый проверяется независимо. Для Immich используйте /api/server/ping. HTTP — только в доверенной сети; для Tailscale нужен включённый VPN.")
-        val urls = EditText(this).apply { hint="https://your-server.example/api/server/ping"; minLines=3; setText(prefs.getString("urls", "")) }; box.addView(urls)
-        label("Интервал, минуты (2–30)")
-        val interval = EditText(this).apply { inputType=2; setText(prefs.getInt("minutes",3).toString()) }; box.addView(interval)
-        fun button(s: String, f: () -> Unit) { box.addView(Button(this).apply { text=s; setOnClickListener { f() } }) }
-        button("Сохранить и включить") {
-            val entries=urls.text.toString().lines().map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-            val valid=entries.size in 1..10 && entries.all { runCatching { val u=URI(it); u.scheme in listOf("http","https") && !u.host.isNullOrBlank() && u.userInfo==null && u.fragment==null }.getOrDefault(false) }
-            val n=interval.text.toString().toIntOrNull()
-            if (!valid || n==null || n !in 2..30) Toast.makeText(this,"Проверьте адреса и интервал",Toast.LENGTH_LONG).show()
-            else {
-                prefs.edit().putString("urls",entries.joinToString("\n")).putInt("minutes",n).apply()
-                if(Build.VERSION.SDK_INT>=33) requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"),1)
-                startForegroundService(Intent(this,MonitorService::class.java))
-                Toast.makeText(this,"Мониторинг включён",Toast.LENGTH_SHORT).show()
+        val root=column().apply { setBackgroundColor(bg) }
+        root.setOnApplyWindowInsetsListener { v,insets ->
+            v.setPadding(insets.systemWindowInsetLeft,insets.systemWindowInsetTop,insets.systemWindowInsetRight,insets.systemWindowInsetBottom); insets
+        }
+        val header=column().apply { setPadding(dp(24),dp(14),dp(24),dp(12)) }
+        header.addView(text("PI / POCKET MONITOR",12f,accent,true))
+        header.addView(text("Сервер под рукой",27f,ink,true)); root.addView(header)
+        content=column().apply { setPadding(dp(20),dp(8),dp(20),dp(16)) }
+        root.addView(ScrollView(this).apply { isFillViewport=true; addView(content) },LinearLayout.LayoutParams(-1,0,1f))
+        val nav=LinearLayout(this).apply { setPadding(dp(12),dp(8),dp(12),dp(8)); setBackgroundColor(surface) }
+        listOf("Обзор","История","Настройки").forEachIndexed { index,title ->
+            nav.addView(Button(this).apply {
+                text=title; isAllCaps=false; textSize=13f; setTextColor(ink); background=shape(surface,12)
+                setOnClickListener { page=index; render(); for(i in 0 until nav.childCount) nav.getChildAt(i).background=shape(if(i==page) bg else surface,12) }
+            },LinearLayout.LayoutParams(0,dp(48),1f))
+        }
+        root.addView(nav); setContentView(root); render()
+    }
+    override fun onResume() { super.onResume(); handler.post(refresh) }
+    override fun onPause() { handler.removeCallbacks(refresh); super.onPause() }
+    private fun endpoints()=prefs.getString("urls","")!!.lines().filter { it.isNotBlank() }
+    private fun name(url:String):String {
+        val host=runCatching { URI(url).host ?: url }.getOrDefault(url)
+        return when { url.contains("/api/server/ping") -> "Immich"; url.contains("/healthz") -> "n8n"; else -> host }
+    }
+    private fun render() {
+        content.removeAllViews()
+        when(page) { 0->overview(); 1->history(); else->settings() }
+    }
+    private fun overview() {
+        val entries=endpoints(); val active=MonitorService.active
+        val fresh=entries.count { System.currentTimeMillis()-prefs.getLong("endpoint:$it:checked",0)<(prefs.getInt("minutes",3)+2)*60000L }
+        val good=entries.count { prefs.getString("endpoint:$it:result","")=="ok" }
+        val issues=entries.count { prefs.getBoolean("endpoint:$it:incident",false) }
+        val title=when { entries.isEmpty()->"Добавим первый сервис"; !active->"Мониторинг на паузе"; issues>0->"Нужно внимание"; fresh==entries.size && good==entries.size->"Сервисы отвечают"; else->"Ожидаем свежие данные" }
+        val hero=card(color=Color.parseColor(if(dark) "#163D30" else "#DCECE1"))
+        hero.addView(text(if(active) "●  МОНИТОРИНГ ВКЛЮЧЁН" else "○  МОНИТОРИНГ ВЫКЛЮЧЕН",11f,accent,true))
+        hero.addView(text(title,25f,ink,true))
+        hero.addView(text(if(entries.isEmpty()) "Укажите адрес проверки в настройках." else "${entries.size} сервисов · каждые ${prefs.getInt("minutes",3)} мин\nОпрос при разблокированном экране",14f,muted))
+        button(hero,if(active) "Приостановить" else "Включить мониторинг",true) {
+            if(active) { stopService(Intent(this,MonitorService::class.java)); handler.postDelayed({ render() },200) }
+            else if(entries.isEmpty()) { page=2; render() } else start()
+        }
+        content.addView(text("СЕРВИСЫ",12f,muted,true))
+        entries.forEach { url ->
+            val key="endpoint:$url"; val checked=prefs.getLong("$key:checked",0); val result=prefs.getString("$key:result","")
+            val stale=System.currentTimeMillis()-checked>(prefs.getInt("minutes",3)+2)*60000L
+            val status=when { checked==0L->"Ещё не проверен"; stale->"Данные устарели"; result=="ok"->"Доступен"; result=="network"->"Проверьте сеть телефона"; else->"Ошибка проверки" }
+            card().apply {
+                addView(text(name(url),20f,ink,true))
+                addView(text(status,14f,if(result=="ok"&&!stale) accent else muted,true))
+                addView(text(url,12f,muted))
+                if(checked>0) addView(text("Последняя проверка · "+SimpleDateFormat("HH:mm:ss",Locale.getDefault()).format(Date(checked)),12f,muted))
             }
         }
-        button("Остановить") { stopService(Intent(this,MonitorService::class.java)) }
-        val history=TextView(this).apply { textSize=14f }; box.addView(history)
-        button("Обновить журнал") { history.text=prefs.getString("history","Проверок пока нет") }
-        history.text=prefs.getString("history","Проверок пока нет")
-        label("Разрешите уведомления и фоновую работу в настройках Android. После перезагрузки телефона или принудительной остановки откройте приложение и включите мониторинг снова. Никаких команд управления сервером приложение не отправляет.")
+        content.addView(text("Проверяется доступность адресов. Общая диагностика Pi пока не подключена.",12f,muted))
+    }
+    private fun start() {
+        if(Build.VERSION.SDK_INT>=33) requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"),1)
+        startForegroundService(Intent(this,MonitorService::class.java)); handler.postDelayed({ if(page==0) render() },250)
+    }
+    private fun history() {
+        content.addView(text("История событий",24f,ink,true))
+        content.addView(text("Ошибки и восстановления. Успешные регулярные проверки скрыты.",14f,muted))
+        val lines=prefs.getString("history","")!!.lines().filter { it.isNotBlank() && (!it.contains("HTTP 2") || it.contains("Восстанов")) }
+        if(lines.isEmpty()) card().addView(text("Пока без событий\nЗдесь появятся проблемы и восстановление связи.",16f,muted))
+        else lines.forEach { card().addView(text(it,14f)) }
+    }
+    private fun settings() {
+        content.addView(text("Настройки",24f,ink,true))
+        val c=card(); c.addView(text("Адреса сервисов",18f,ink,true))
+        c.addView(text("По одному URL на строку. Каждый проверяется отдельно, включая домашние адреса вне дома.",13f,muted))
+        val urls=EditText(this).apply { setTextColor(ink); setHintTextColor(muted); hint="https://example.com/health"; minLines=3; gravity=Gravity.TOP; textSize=14f; setText(prefs.getString("urls","")) }; c.addView(urls)
+        c.addView(text("Интервал · 2–30 минут",14f,muted))
+        val minutes=EditText(this).apply { setTextColor(ink); inputType=2; setText(prefs.getInt("minutes",3).toString()) }; c.addView(minutes)
+        button(c,"Сохранить",true) {
+            val entries=urls.text.toString().lines().map { it.trim() }.filter { it.isNotBlank() }.distinct(); val n=minutes.text.toString().toIntOrNull()
+            val valid=entries.size in 1..10 && entries.all { runCatching { val u=URI(it); u.scheme in listOf("http","https") && !u.host.isNullOrBlank() && u.userInfo==null && u.fragment==null }.getOrDefault(false) }
+            if(!valid||n==null||n !in 2..30) Toast.makeText(this,"Нужны 1–10 URL и интервал 2–30 минут",Toast.LENGTH_LONG).show()
+            else { prefs.edit().putString("urls",entries.joinToString("\n")).putInt("minutes",n).apply(); page=0; render() }
+        }
+        card().apply {
+            addView(text("Работа в фоне",18f,ink,true))
+            addView(text("Разрешите уведомления и фоновую работу. После перезагрузки телефона включите мониторинг снова. Для VPN-адреса нужен Tailscale. HTTP используйте только в доверенной сети.",14f,muted))
+            button(this,"Настройки Android") { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:$packageName"))) }
+        }
+        content.addView(text("Pi Pocket Monitor · 0.2.0\nДанные хранятся только на телефоне.",12f,muted))
     }
 }
