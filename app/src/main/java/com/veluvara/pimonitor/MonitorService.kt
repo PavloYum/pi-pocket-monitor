@@ -73,6 +73,7 @@ class MonitorService : Service() {
         }
         prefs.edit().putBoolean("offline",false).apply()
         val internet=cm.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)==true
+        checkDevice()
         for((index,endpoint) in prefs.getString("urls","")!!.lines().filter { it.isNotBlank() }.withIndex()) {
             if(stopped || !unlocked()) return
             var connection:HttpURLConnection?=null
@@ -103,6 +104,32 @@ class MonitorService : Service() {
                 }
             }
         }
+    }
+    private fun checkDevice() {
+        val url=prefs.getString("device_url", "")!!.trim()
+        if(url.isEmpty() || stopped || !unlocked()) return
+        var conn:HttpURLConnection?=null
+        try {
+            conn=URL(url).openConnection() as HttpURLConnection
+            conn.connectTimeout=5000; conn.readTimeout=5000; conn.instanceFollowRedirects=false
+            if(conn.responseCode!=200) throw IllegalStateException("HTTP")
+            val raw=conn.inputStream.bufferedReader().use { it.readText() }
+            if(raw.length>262144) throw IllegalStateException("Size")
+            val data=org.json.JSONObject(raw)
+            if(data.getInt("schema")!=1) throw IllegalStateException("Schema")
+            if(stopped || !unlocked()) return
+            val alerts=data.getJSONArray("alerts")
+            val stale=data.optBoolean("stale",true)
+            val signature=(if(stale) "Данные устройства устарели. " else "")+(0 until alerts.length()).joinToString("; ") { alerts.getString(it) }
+            val previous=prefs.getString("device_alert", "")!!
+            if(signature.isNotEmpty() && signature!=previous) { alert(50,"Pi: $signature"); log("Pi: $signature") }
+            if(signature.isEmpty() && previous.isNotEmpty()) { alert(50,"Pi: показатели вернулись в норму"); log("Восстановление: Pi") }
+            prefs.edit().putString("device_json",raw).putLong("device_checked",System.currentTimeMillis()).putString("device_error", "").putInt("device_failures",0).putString("device_alert",signature).apply()
+        } catch(e:Exception) {
+            val count=prefs.getInt("device_failures",0)+1
+            prefs.edit().putString("device_error","Нет ответа. Проверьте Tailscale и связь с Pi.").putInt("device_failures",count).apply()
+            if(count==3) { alert(51,"Нет связи с мониторингом Pi. Проверьте VPN и сеть."); log("Нет связи с мониторингом Pi") }
+        } finally { conn?.disconnect() }
     }
     override fun onDestroy() { active=false; stopped=true; handler.removeCallbacks(tick); unregisterReceiver(receiver); worker.shutdownNow(); super.onDestroy() }
     override fun onBind(intent:Intent?) : IBinder?=null

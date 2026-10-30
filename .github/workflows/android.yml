@@ -21,11 +21,11 @@ jobs:
           gradle-version: '8.11.1'
       - run: gradle :app:assembleDebug :app:lintDebug --no-daemon
       - run: |
-          mkdir -p downloads/0.2.0
-          cp app/build/outputs/apk/debug/app-debug.apk downloads/0.2.0/pi-pocket-monitor-0.2.0-debug.apk
-          cd downloads/0.2.0
+          mkdir -p downloads/0.3.0
+          cp app/build/outputs/apk/debug/app-debug.apk downloads/0.3.0/pi-pocket-monitor-0.3.0-debug.apk
+          cd downloads/0.3.0
           sha256sum *.apk > SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
-          name: pi-pocket-monitor-0.2.0-debug
-          path: downloads/0.2.0/
+          name: pi-pocket-monitor-0.3.0-debug
+          path: downloads/0.3.0/

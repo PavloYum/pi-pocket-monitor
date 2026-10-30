@@ -85,8 +85,9 @@ class MainActivity : Activity() {
         hero.addView(text(if(entries.isEmpty()) "Укажите адрес проверки в настройках." else "${entries.size} сервисов · каждые ${prefs.getInt("minutes",3)} мин\nОпрос при разблокированном экране",14f,muted))
         button(hero,if(active) "Приостановить" else "Включить мониторинг",true) {
             if(active) { stopService(Intent(this,MonitorService::class.java)); handler.postDelayed({ render() },200) }
-            else if(entries.isEmpty()) { page=2; render() } else start()
+            else if(entries.isEmpty() && prefs.getString("device_url", "")!!.isBlank()) { page=2; render() } else start()
         }
+        deviceCard()
         content.addView(text("СЕРВИСЫ",12f,muted,true))
         entries.forEach { url ->
             val key="endpoint:$url"; val checked=prefs.getLong("$key:checked",0); val result=prefs.getString("$key:result","")
@@ -99,11 +100,45 @@ class MainActivity : Activity() {
                 if(checked>0) addView(text("Последняя проверка · "+SimpleDateFormat("HH:mm:ss",Locale.getDefault()).format(Date(checked)),12f,muted))
             }
         }
-        content.addView(text("Проверяется доступность адресов. Общая диагностика Pi пока не подключена.",12f,muted))
+        content.addView(text("Проверяется доступность адресов. Показатели устройства доступны при подключённом источнике Pi.",12f,muted))
     }
     private fun start() {
         if(Build.VERSION.SDK_INT>=33) requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"),1)
         startForegroundService(Intent(this,MonitorService::class.java)); handler.postDelayed({ if(page==0) render() },250)
+    }
+    private fun deviceCard() {
+        content.addView(text("УСТРОЙСТВО",12f,muted,true))
+        val c=card()
+        c.addView(text("Raspberry Pi",22f,ink,true))
+        if(prefs.getString("device_url", "")!!.isBlank()) {
+            c.addView(text("Подключите адрес мониторинга в настройках. Нужен Tailscale.",14f,muted)); return
+        }
+        val error=prefs.getString("device_error", "")!!
+        if(error.isNotEmpty()) c.addView(text(error,14f,muted))
+        val raw=prefs.getString("device_json", "")!!
+        if(raw.isBlank()) { c.addView(text("Ожидаем первую сводку",14f,muted)); return }
+        try {
+            val d=org.json.JSONObject(raw)
+            val age=System.currentTimeMillis()/1000-d.getLong("collected_at")
+            c.addView(text(if(age>180 || d.optBoolean("stale",true)) "Данные устарели" else "Снимок ${age.coerceAtLeast(0)} сек назад",12f,muted))
+            fun gb(n:Double)=String.format(Locale.getDefault(),"%.1f",n/1073741824)
+            c.addView(text("CPU  ${d.getDouble("cpu_percent")}%    ·    ${if(d.isNull("temperature")) "—" else d.getDouble("temperature").toString()+" °C"}",20f,ink,true))
+            c.addView(text("Память: ${gb(d.getDouble("memory_total")-d.getDouble("memory_available"))} / ${gb(d.getDouble("memory_total"))} ГБ",15f))
+            c.addView(text("Swap: ${gb(d.getDouble("swap_total")-d.getDouble("swap_free"))} / ${gb(d.getDouble("swap_total"))} ГБ",14f,muted))
+            c.addView(text("Без перезагрузки: ${d.getLong("uptime_seconds")/3600} ч",14f,muted))
+            val disks=d.getJSONArray("disks")
+            for(i in 0 until disks.length()) { val disk=disks.getJSONObject(i); c.addView(text("${disk.getString("name")}: свободно ${gb(disk.getDouble("free"))} / ${gb(disk.getDouble("total"))} ГБ",14f)) }
+            val alerts=d.getJSONArray("alerts")
+            for(i in 0 until alerts.length()) c.addView(text("! ${alerts.getString(i)}",14f,Color.parseColor("#B65B32"),true))
+            val watched=d.optJSONArray("watched")
+            if(watched!=null) {
+                c.addView(text("Контролируемые сервисы",16f,ink,true))
+                for(i in 0 until watched.length()) { val w=watched.getJSONObject(i); c.addView(text("${if(w.getBoolean("incident")) "!" else if(w.getInt("failures")>0) "○" else "●"} ${w.getString("name")} · попыток восстановления ${w.getInt("attempts")}",12f,muted)) }
+            }
+            val containers=d.getJSONArray("containers")
+            c.addView(text("Контейнеры · ${containers.length()}",16f,ink,true))
+            for(i in 0 until containers.length()) { val item=containers.getJSONObject(i); c.addView(text("${item.getString("name")} · ${item.getString("status")}",12f,muted)) }
+        } catch(e:Exception) { c.addView(text("Не удалось прочитать сводку устройства",14f,muted)) }
     }
     private fun history() {
         content.addView(text("История событий",24f,ink,true))
@@ -116,20 +151,24 @@ class MainActivity : Activity() {
         content.addView(text("Настройки",24f,ink,true))
         val c=card(); c.addView(text("Адреса сервисов",18f,ink,true))
         c.addView(text("По одному URL на строку. Каждый проверяется отдельно, включая домашние адреса вне дома.",13f,muted))
+        c.addView(text("Мониторинг устройства · URL /status",14f,muted))
+        val device=EditText(this).apply { setTextColor(ink); textSize=14f; hint="http://VPN-IP:8786/status"; setText(prefs.getString("device_url", "")); inputType=17 }; c.addView(device)
         val urls=EditText(this).apply { setTextColor(ink); setHintTextColor(muted); hint="https://example.com/health"; minLines=3; gravity=Gravity.TOP; textSize=14f; setText(prefs.getString("urls","")) }; c.addView(urls)
         c.addView(text("Интервал · 2–30 минут",14f,muted))
         val minutes=EditText(this).apply { setTextColor(ink); inputType=2; setText(prefs.getInt("minutes",3).toString()) }; c.addView(minutes)
         button(c,"Сохранить",true) {
             val entries=urls.text.toString().lines().map { it.trim() }.filter { it.isNotBlank() }.distinct(); val n=minutes.text.toString().toIntOrNull()
-            val valid=entries.size in 1..10 && entries.all { runCatching { val u=URI(it); u.scheme in listOf("http","https") && !u.host.isNullOrBlank() && u.userInfo==null && u.fragment==null }.getOrDefault(false) }
+            val deviceUrl=device.text.toString().trim()
+            val deviceValid=deviceUrl.isBlank() || runCatching { val u=URI(deviceUrl); u.scheme in listOf("http","https") && !u.host.isNullOrBlank() && u.userInfo==null && u.fragment==null }.getOrDefault(false)
+            val valid=deviceValid && (entries.isNotEmpty() || deviceUrl.isNotBlank()) && entries.size <=10 && entries.all { runCatching { val u=URI(it); u.scheme in listOf("http","https") && !u.host.isNullOrBlank() && u.userInfo==null && u.fragment==null }.getOrDefault(false) }
             if(!valid||n==null||n !in 2..30) Toast.makeText(this,"Нужны 1–10 URL и интервал 2–30 минут",Toast.LENGTH_LONG).show()
-            else { prefs.edit().putString("urls",entries.joinToString("\n")).putInt("minutes",n).apply(); page=0; render() }
+            else { prefs.edit().putString("device_url",deviceUrl).putString("urls",entries.joinToString("\n")).putInt("minutes",n).apply(); page=0; render() }
         }
         card().apply {
             addView(text("Работа в фоне",18f,ink,true))
             addView(text("Разрешите уведомления и фоновую работу. После перезагрузки телефона включите мониторинг снова. Для VPN-адреса нужен Tailscale. HTTP используйте только в доверенной сети.",14f,muted))
             button(this,"Настройки Android") { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:$packageName"))) }
         }
-        content.addView(text("Pi Pocket Monitor · 0.2.0\nДанные хранятся только на телефоне.",12f,muted))
+        content.addView(text("Pi Pocket Monitor · 0.3.0\nДанные хранятся только на телефоне.",12f,muted))
     }
 }
