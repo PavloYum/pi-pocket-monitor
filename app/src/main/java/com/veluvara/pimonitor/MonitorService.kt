@@ -58,7 +58,10 @@ class MonitorService : Service() {
         val lines=("$date $text\n"+prefs.getString("history","")).lines().take(100).joinToString("\n")
         prefs.edit().putString("history",lines).apply()
     }
-    private fun alert(id:Int,text:String) { runCatching { manager.notify(id,notification("alerts",text)) } }
+    private fun alert(id:Int,text:String) {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        runCatching { manager.notify(id,notification("alerts",text)) }
+    }
     private fun checkAll() {
         val cm=getSystemService(ConnectivityManager::class.java)
         val network=cm.activeNetwork
