@@ -1,10 +1,10 @@
 # Pi Pocket Monitor
 
 Отдельное Android-приложение на Kotlin для проверки личного сервера при
-использовании телефона. Тестовая версия 0.3.0: APK собран, Android Lint прошёл в GitHub Actions.
+использовании телефона. Тестовая версия 0.4.0: APK собран, Android Lint прошёл в GitHub Actions.
 Испытания на физическом устройстве пока не выполнены.
 
-[Скачать APK](https://github.com/PavloYum/pi-pocket-monitor/releases/download/v0.3.0/pi-pocket-monitor-0.3.0-debug.apk)
+[Скачать APK](https://github.com/PavloYum/pi-pocket-monitor/releases/download/v0.4.0/pi-pocket-monitor-0.4.0-debug.apk)
 
 ## Возможности
 
