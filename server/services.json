@@ -110,10 +110,7 @@
     "name": "veluspacebot"
   },
   {
-    "name": "veluvara-site",
-    "type": "http",
-    "port": 80,
-    "path": "/"
+    "name": "veluvara-site"
   },
   {
     "name": "n8n-postgres",
