@@ -136,14 +136,36 @@ class MainActivity : Activity() {
             for(i in 0 until disks.length()) { val disk=disks.getJSONObject(i); c.addView(text("${disk.getString("name")}: свободно ${gb(disk.getDouble("free"))} / ${gb(disk.getDouble("total"))} ГБ",14f)) }
             val alerts=d.getJSONArray("alerts")
             for(i in 0 until alerts.length()) c.addView(text("! ${alerts.getString(i)}",14f,Color.parseColor("#B65B32"),true))
-            val watched=d.optJSONArray("watched")
-            if(watched!=null) {
-                c.addView(text("Контролируемые сервисы",16f,ink,true))
-                for(i in 0 until watched.length()) { val w=watched.getJSONObject(i); c.addView(text("${if(w.getBoolean("incident")) "!" else if(w.getInt("failures")>0) "○" else "●"} ${w.getString("name")} · попыток восстановления ${w.getInt("attempts")}",12f,muted)) }
+            val load=d.optJSONArray("load_average")
+            if(load!=null) c.addView(text("Нагрузка 1 / 5 / 15 мин: ${load.getDouble(0)} / ${load.getDouble(1)} / ${load.getDouble(2)} · ${d.optInt("cpu_cores")} ядер",13f,muted))
+            fun meter(label:String,used:Double,total:Double) {
+                c.addView(text(label,13f,muted))
+                c.addView(ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply {
+                    max=100; progress=if(total>0) (used/total*100).toInt().coerceIn(0,100) else 0
+                    progressTintList=android.content.res.ColorStateList.valueOf(accent)
+                },LinearLayout.LayoutParams(-1,dp(8)).apply { bottomMargin=dp(12) })
             }
-            val containers=d.getJSONArray("containers")
-            c.addView(text("Контейнеры · ${containers.length()}",16f,ink,true))
-            for(i in 0 until containers.length()) { val item=containers.getJSONObject(i); c.addView(text("${item.getString("name")} · ${item.getString("status")}",12f,muted)) }
+            meter("CPU",d.getDouble("cpu_percent"),100.0)
+            meter("Использование RAM",d.getDouble("memory_total")-d.getDouble("memory_available"),d.getDouble("memory_total"))
+            for(i in 0 until disks.length()) { val disk=disks.getJSONObject(i); meter(disk.getString("name"),disk.getDouble("total")-disk.getDouble("free"),disk.getDouble("total")) }
+            val net=d.optJSONObject("network_bytes")
+            if(net!=null) for(key in net.keys()) { val n=net.getJSONObject(key); c.addView(text("$key · принято ${gb(n.getDouble("rx"))} ГБ / отправлено ${gb(n.getDouble("tx"))} ГБ с запуска интерфейса",12f,muted)) }
+            val services=d.optJSONArray("services")
+            content.addView(text("ДОСТУПНОСТЬ СЕРВИСОВ",12f,muted,true))
+            if(services==null || services.length()==0) card().addView(text("Нет результатов проверок сервисов",14f,muted))
+            else for(i in 0 until services.length()) {
+                val item=services.getJSONObject(i)
+                val stale=age>180 || d.optBoolean("stale",true) || error.isNotEmpty()
+                val status=if(stale) "unknown" else item.getString("status")
+                val label=when(status) { "up"->"Доступен"; "down"->"Недоступен"; "limited"->"Частичная проверка"; else->"Нет актуальной проверки" }
+                val color=when(status) { "up"->accent; "down"->Color.parseColor("#B65B32"); else->muted }
+                card().apply {
+                    addView(text(item.getString("name"),18f,ink,true))
+                    addView(text(label,15f,color,true))
+                    addView(text(item.getString("detail"),13f,muted))
+                    addView(text("${item.getString("method")} · ${item.optInt("latency_ms")} мс",12f,muted))
+                }
+            }
         } catch(e:Exception) { c.addView(text("Не удалось прочитать сводку устройства",14f,muted)) }
     }
     private fun history() {
@@ -175,6 +197,6 @@ class MainActivity : Activity() {
             addView(text("Разрешите уведомления и фоновую работу. После перезагрузки телефона включите мониторинг снова. Для VPN-адреса нужен Tailscale. HTTP используйте только в доверенной сети.",14f,muted))
             button(this,"Настройки Android") { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:$packageName"))) }
         }
-        content.addView(text("Pi Pocket Monitor · 0.3.0\nДанные хранятся только на телефоне.",12f,muted))
+        content.addView(text("Pi Pocket Monitor · 0.4.0\nДанные хранятся только на телефоне.",12f,muted))
     }
 }

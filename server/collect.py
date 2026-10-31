@@ -30,5 +30,21 @@ try:
     if data['watch_age_seconds']>300: data['alerts'].append('Мониторинг восстановления не обновляется')
 except Exception: data['alerts'].append('Нет данных мониторинга восстановления')
 if data['temperature'] is not None and data['temperature']>=80: data['alerts'].append('Высокая температура')
+data['load_average']=list(os.getloadavg())
+data['cpu_cores']=os.cpu_count()
+data['network_bytes']={}
+for interface in ('eth0','wlan0','tailscale0'):
+    try:
+        root=Path('/sys/class/net')/interface/'statistics'
+        data['network_bytes'][interface]={'rx':int((root/'rx_bytes').read_text()),'tx':int((root/'tx_bytes').read_text())}
+    except OSError: pass
+try:
+    from probes import collect_services
+    data['services']=collect_services()
+    data['alerts'] += ['Недоступен: '+s['name'] for s in data['services'] if s['status']=='down']
+except Exception:
+    data['services']=[]
+    data['alerts'].append('Проверки сервисов недоступны')
+data['collected_at']=int(time.time())
 OUT.parent.mkdir(exist_ok=True,parents=True)
 tmp=OUT.with_suffix('.tmp'); tmp.write_text(json.dumps(data,ensure_ascii=False)); tmp.chmod(0o644); tmp.replace(OUT)

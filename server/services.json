@@ -1,0 +1,156 @@
+[
+  {
+    "name": "immich_server",
+    "type": "http",
+    "port": 2283,
+    "path": "/api/server/ping"
+  },
+  {
+    "name": "visitka-dev",
+    "type": "http",
+    "port": 80,
+    "path": "/"
+  },
+  {
+    "name": "bm-cloudflared-1",
+    "type": "http",
+    "port": 20241,
+    "path": "/ready"
+  },
+  {
+    "name": "n8n-cloudflared",
+    "type": "http",
+    "port": 20241,
+    "path": "/ready"
+  },
+  {
+    "name": "yumeiho-cloudflared",
+    "type": "http",
+    "port": 20241,
+    "path": "/ready"
+  },
+  {
+    "name": "picall-server-1"
+  },
+  {
+    "name": "yumeiho-wellness-frontend-1",
+    "type": "http",
+    "port": 80,
+    "path": "/"
+  },
+  {
+    "name": "yumeiho_booking_bot-bot-1"
+  },
+  {
+    "name": "yumeiho-wellness-backend-1"
+  },
+  {
+    "name": "immich_postgres"
+  },
+  {
+    "name": "immich_redis"
+  },
+  {
+    "name": "yumeiho-voucher-hub"
+  },
+  {
+    "name": "pi5-camera",
+    "type": "http",
+    "port": 1984,
+    "path": "/api/streams"
+  },
+  {
+    "name": "yumeiho_booking_whatsapp_bot-whatsapp-bot-1"
+  },
+  {
+    "name": "n8n",
+    "type": "http",
+    "port": 5678,
+    "path": "/healthz/readiness"
+  },
+  {
+    "name": "picall-coturn-1"
+  },
+  {
+    "name": "picall-coturn-tls-1"
+  },
+  {
+    "name": "picall-postgres-1"
+  },
+  {
+    "name": "yumeiho_booking_bot-db-1"
+  },
+  {
+    "name": "yumeiho-caddy"
+  },
+  {
+    "name": "androidserverbot-mqtt-pi",
+    "type": "tcp",
+    "port": 1883
+  },
+  {
+    "name": "licensehub"
+  },
+  {
+    "name": "telegram-userbot-admin"
+  },
+  {
+    "name": "telegram-userbot"
+  },
+  {
+    "name": "bm-frontend-1",
+    "type": "http",
+    "port": 80,
+    "path": "/"
+  },
+  {
+    "name": "bm-backend-1"
+  },
+  {
+    "name": "veluspacebot"
+  },
+  {
+    "name": "veluvara-site",
+    "type": "http",
+    "port": 80,
+    "path": "/"
+  },
+  {
+    "name": "n8n-postgres",
+    "type": "tcp",
+    "port": 5432
+  },
+  {
+    "name": "homarr",
+    "type": "http",
+    "port": 7575,
+    "path": "/"
+  },
+  {
+    "name": "chromium"
+  },
+  {
+    "name": "portainer",
+    "type": "http",
+    "port": 9000,
+    "path": "/api/status"
+  },
+  {
+    "name": "bm-db-1"
+  },
+  {
+    "name": "bm-minio-1",
+    "type": "http",
+    "port": 9000,
+    "path": "/minio/health/live"
+  },
+  {
+    "name": "uptime-kuma",
+    "type": "http",
+    "port": 3001,
+    "path": "/"
+  },
+  {
+    "name": "code-server"
+  }
+]
