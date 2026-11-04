@@ -34,12 +34,12 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
       - run: |
-          mkdir -p downloads/0.5.0
-          cp app/build/outputs/apk/release/app-release.apk downloads/0.5.0/pi-pocket-monitor-0.5.0-release.apk
-          cd downloads/0.5.0
+          mkdir -p downloads/0.5.1
+          cp app/build/outputs/apk/release/app-release.apk downloads/0.5.1/pi-pocket-monitor-0.5.1-release.apk
+          cd downloads/0.5.1
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs *.apk > signing-certificate.txt
           sha256sum *.apk > SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
-          name: pi-pocket-monitor-0.5.0-release
-          path: downloads/0.5.0/
+          name: pi-pocket-monitor-0.5.1-release
+          path: downloads/0.5.1/

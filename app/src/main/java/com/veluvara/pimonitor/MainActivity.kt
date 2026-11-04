@@ -196,6 +196,17 @@ class MainActivity : Activity() {
                     addView(text(label,15f,color,true))
                     addView(text(item.getString("detail"),13f,muted))
                     addView(text("${item.getString("method")} · ${item.optInt("latency_ms")} мс",12f,muted))
+                    addView(text("Docker-сети",14f,ink,true))
+                    val networks=item.optJSONArray("networks")
+                    if(networks==null) addView(text("Нет данных — обновите серверную сводку",12f,muted))
+                    else if(networks.length()==0) addView(text("Режим: ${item.optString("network_mode","неизвестен")} · сетей нет",12f,muted))
+                    else for(j in 0 until networks.length()) {
+                        val net=networks.getJSONObject(j)
+                        val connected=net.optBoolean("connected")
+                        val state=if(stale) "нет актуальных данных" else if(connected) "подключена" else "не подключена"
+                        val netColor=if(stale) muted else if(connected) accent else Color.parseColor("#B65B32")
+                        addView(text("${if(stale) "○" else if(connected) "●" else "!"} ${net.getString("name")} — $state${if(net.optBoolean("required")) " · обязательная" else ""}",13f,netColor))
+                    }
                 }
             }
         } catch(e:Exception) { c.addView(text("Не удалось прочитать сводку устройства",14f,muted)) }
@@ -229,6 +240,6 @@ class MainActivity : Activity() {
             addView(text("Разрешите уведомления и фоновую работу. После перезагрузки телефона включите мониторинг снова. Для VPN-адреса нужен Tailscale. HTTP используйте только в доверенной сети.",14f,muted))
             button(this,"Настройки Android") { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:$packageName"))) }
         }
-        content.addView(text("Pi Pocket Monitor · 0.5.0\nДанные хранятся только на телефоне.",12f,muted))
+        content.addView(text("Pi Pocket Monitor · 0.5.1\nДанные хранятся только на телефоне.",12f,muted))
     }
 }

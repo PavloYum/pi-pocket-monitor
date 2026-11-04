@@ -9,11 +9,16 @@ def assess(spec, containers):
     def finish(status,detail):
         result.update(status=status,detail=detail,latency_ms=round((time.monotonic()-start)*1000));return result
     c=containers.get(spec['name'])
+    expected=set(spec.get('networks',[]))
+    actual=c.get('NetworkSettings',{}).get('Networks',{}) if c else {}
+    running=c is not None and c['State']['Status']=='running'
+    result['networks']=[{'name':name,'required':name in expected,'connected':running and name in actual and bool(actual[name].get('EndpointID'))} for name in sorted(expected|set(actual))]
+    result['network_mode']=c.get('HostConfig',{}).get('NetworkMode','unknown') if c else 'unknown'
     if c is None:return finish('down','Контейнер отсутствует')
     if c['State']['Status']!='running':return finish('down','Контейнер '+c['State']['Status'])
     networks=c['NetworkSettings']['Networks']; ips=[n['IPAddress'] for n in networks.values() if n.get('IPAddress')]
     if not ips and c['HostConfig']['NetworkMode'] not in ('host','none'):return finish('down','Нет подключения к Docker-сети')
-    missing=set(spec.get('networks',[]))-set(networks)
+    missing={n['name'] for n in result['networks'] if n['required'] and not n['connected']}
     if missing:return finish('down','Нет Docker-сетей: '+', '.join(sorted(missing)))
     kind=spec.get('type','health');result['method']=kind
     try:
