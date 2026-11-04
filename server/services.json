@@ -3,7 +3,11 @@
     "name": "immich_server",
     "type": "http",
     "port": 2283,
-    "path": "/api/server/ping"
+    "path": "/api/server/ping",
+    "networks": [
+      "n8n-local_n8n_net",
+      "immich_default"
+    ]
   },
   {
     "name": "visitka-dev",
@@ -45,7 +49,8 @@
     "name": "yumeiho-wellness-backend-1"
   },
   {
-    "name": "immich_postgres"
+    "name": "immich_postgres",
+    "type": "postgres"
   },
   {
     "name": "immich_redis"
@@ -55,9 +60,12 @@
   },
   {
     "name": "pi5-camera",
-    "type": "http",
+    "type": "camera",
     "port": 1984,
-    "path": "/api/streams"
+    "path": "/api/streams",
+    "networks": [
+      "camera-stream_default"
+    ]
   },
   {
     "name": "yumeiho_booking_whatsapp_bot-whatsapp-bot-1"
@@ -66,7 +74,10 @@
     "name": "n8n",
     "type": "http",
     "port": 5678,
-    "path": "/healthz/readiness"
+    "path": "/healthz/readiness",
+    "networks": [
+      "n8n-local_n8n_net"
+    ]
   },
   {
     "name": "picall-coturn-1"
@@ -75,17 +86,19 @@
     "name": "picall-coturn-tls-1"
   },
   {
-    "name": "picall-postgres-1"
+    "name": "picall-postgres-1",
+    "type": "postgres"
   },
   {
-    "name": "yumeiho_booking_bot-db-1"
+    "name": "yumeiho_booking_bot-db-1",
+    "type": "postgres"
   },
   {
     "name": "yumeiho-caddy"
   },
   {
     "name": "androidserverbot-mqtt-pi",
-    "type": "tcp",
+    "type": "mqtt",
     "port": 1883
   },
   {
@@ -114,7 +127,7 @@
   },
   {
     "name": "n8n-postgres",
-    "type": "tcp",
+    "type": "postgres",
     "port": 5432
   },
   {
@@ -133,7 +146,8 @@
     "path": "/api/status"
   },
   {
-    "name": "bm-db-1"
+    "name": "bm-db-1",
+    "type": "postgres"
   },
   {
     "name": "bm-minio-1",

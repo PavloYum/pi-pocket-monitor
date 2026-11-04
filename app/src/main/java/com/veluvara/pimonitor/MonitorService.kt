@@ -126,8 +126,8 @@ class MonitorService : Service() {
             val stale=data.optBoolean("stale",true)
             val signature=(if(stale) "Данные устройства устарели. " else "")+(0 until alerts.length()).joinToString("; ") { alerts.getString(it) }
             val previous=prefs.getString("device_alert", "")!!
-            if(signature.isNotEmpty() && signature!=previous) { alert(50,"Pi: $signature"); log("Pi: $signature") }
-            if(signature.isEmpty() && previous.isNotEmpty()) { alert(50,"Pi: показатели вернулись в норму"); log("Восстановление: Pi") }
+            if(!data.optBoolean("maintenance") && signature.isNotEmpty() && signature!=previous) { alert(50,"Pi: $signature"); log("Pi: $signature") }
+            if(!data.optBoolean("maintenance") && signature.isEmpty() && previous.isNotEmpty()) { alert(50,"Pi: показатели вернулись в норму"); log("Восстановление: Pi") }
             if(prefs.getInt("device_failures",0)>=3) { alert(51,"Связь с мониторингом Pi восстановлена"); log("Восстановление: связь с Pi") }
             prefs.edit().putString("device_json",raw).putLong("device_checked",System.currentTimeMillis()).putString("device_error", "").putInt("device_failures",0).putString("device_alert",signature).apply()
         } catch(e:Exception) {

@@ -16,6 +16,8 @@ import java.util.*
 class MainActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("monitor", MODE_PRIVATE) }
     private var page=0
+    private var period="day"
+    private var metric="cpu"
     private lateinit var content: LinearLayout
     private val handler=Handler(Looper.getMainLooper())
     private val refresh=object:Runnable { override fun run() { if(page!=2) render(); handler.postDelayed(this,3000) } }
@@ -150,6 +152,36 @@ class MainActivity : Activity() {
             for(i in 0 until disks.length()) { val disk=disks.getJSONObject(i); meter(disk.getString("name"),disk.getDouble("total")-disk.getDouble("free"),disk.getDouble("total")) }
             val net=d.optJSONObject("network_bytes")
             if(net!=null) for(key in net.keys()) { val n=net.getJSONObject(key); c.addView(text("$key · принято ${gb(n.getDouble("rx"))} ГБ / отправлено ${gb(n.getDouble("tx"))} ГБ с запуска интерфейса",12f,muted)) }
+            val hardware=d.optJSONObject("hardware")
+            if(hardware!=null) {
+                c.addView(text("SSD SMART: "+if(hardware.isNull("smart")) "нет данных" else if(hardware.optBoolean("smart")) "без предупреждений" else "ошибка",14f,muted))
+                c.addView(text("Ошибки USB/диска: "+if(hardware.isNull("kernel_errors")) "нет данных" else hardware.optInt("kernel_errors").toString()+" за 5 минут",12f,muted))
+            }
+            val power=d.optJSONObject("power")
+            if(power!=null) {
+                c.addView(text("Питание: "+if(power.optBoolean("undervoltage_now")) "пониженное напряжение" else "нет активного предупреждения",14f,muted))
+                c.addView(text("Троттлинг сейчас: ${power.optBoolean("throttled_now")} · с запуска: ${power.optBoolean("throttled_since_boot")}",12f,muted))
+                if(power.optBoolean("undervoltage_since_boot")) c.addView(text("После запуска фиксировалось низкое напряжение",12f,muted))
+            }
+            if(d.optBoolean("maintenance")) c.addView(text("Режим обслуживания: уведомления и восстановление приостановлены",14f,muted,true))
+            val graph=card()
+            graph.addView(text("История показателей",20f,ink,true))
+            val periods=mapOf("hour" to "Час","day" to "Сутки","week" to "Неделя")
+            button(graph,"Период: ${periods[period]}") {
+                android.app.AlertDialog.Builder(this).setItems(periods.values.toTypedArray()) { _,i -> period=periods.keys.toList()[i];render() }.show()
+            }
+            val metrics=linkedMapOf("cpu" to "CPU, %","ram" to "RAM, %","temperature" to "Температура, °C","free_gb" to "Минимум свободного места, ГиБ","rx_mbps" to "Приём сети, МБ/с","disk_mbps" to "Запись на диски, МБ/с")
+            button(graph,metrics[metric] ?: metric) {
+                android.app.AlertDialog.Builder(this).setItems(metrics.values.toTypedArray()) { _,i -> metric=metrics.keys.toList()[i];render() }.show()
+            }
+            val points=d.optJSONObject("history")?.optJSONArray(period) ?: org.json.JSONArray()
+            graph.addView(MetricChart(this,points,metric,accent,muted),LinearLayout.LayoutParams(-1,dp(180)))
+            graph.addView(text("Сбор начался после обновления сервера. Старые данные не восстанавливаются.",12f,muted))
+            val incidents=d.optJSONArray("incidents")
+            if(incidents!=null && incidents.length()>0) {
+                val events=card();events.addView(text("Инциденты сервера",20f,ink,true))
+                for(i in 0 until incidents.length()) { val e=incidents.getJSONObject(i); events.addView(text((if(e.isNull("closed")) "Открыт · " else "Завершён · ")+e.getString("detail"),13f,muted)) }
+            }
             val services=d.optJSONArray("services")
             content.addView(text("ДОСТУПНОСТЬ СЕРВИСОВ",12f,muted,true))
             if(services==null || services.length()==0) card().addView(text("Нет результатов проверок сервисов",14f,muted))
@@ -197,6 +229,6 @@ class MainActivity : Activity() {
             addView(text("Разрешите уведомления и фоновую работу. После перезагрузки телефона включите мониторинг снова. Для VPN-адреса нужен Tailscale. HTTP используйте только в доверенной сети.",14f,muted))
             button(this,"Настройки Android") { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:$packageName"))) }
         }
-        content.addView(text("Pi Pocket Monitor · 0.4.0\nДанные хранятся только на телефоне.",12f,muted))
+        content.addView(text("Pi Pocket Monitor · 0.5.0\nДанные хранятся только на телефоне.",12f,muted))
     }
 }

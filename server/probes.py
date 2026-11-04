@@ -13,6 +13,8 @@ def assess(spec, containers):
     if c['State']['Status']!='running':return finish('down','Контейнер '+c['State']['Status'])
     networks=c['NetworkSettings']['Networks']; ips=[n['IPAddress'] for n in networks.values() if n.get('IPAddress')]
     if not ips and c['HostConfig']['NetworkMode'] not in ('host','none'):return finish('down','Нет подключения к Docker-сети')
+    missing=set(spec.get('networks',[]))-set(networks)
+    if missing:return finish('down','Нет Docker-сетей: '+', '.join(sorted(missing)))
     kind=spec.get('type','health');result['method']=kind
     try:
         if kind=='http':
@@ -21,6 +23,23 @@ def assess(spec, containers):
                 with urllib.request.urlopen(url,timeout=3) as r: code=r.status
             except urllib.error.HTTPError as e:code=e.code
             return finish('up' if code in spec.get('codes',[200]) else 'down','HTTP '+str(code))
+        if kind=='postgres':
+            output=subprocess.check_output(['docker','exec',spec['name'],'sh','-c','psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT 1"'],timeout=5,stderr=subprocess.DEVNULL,text=True)
+            return finish('up' if output.strip()=='1' else 'down','SQL SELECT 1')
+        if kind=='camera':
+            output=subprocess.check_output(['docker','exec',spec['name'],'ffprobe','-v','error','-rtsp_transport','tcp','-show_entries','stream=codec_type','-of','json','rtsp://127.0.0.1:8554/camera'],timeout=12,stderr=subprocess.DEVNULL,text=True)
+            tracks=[x['codec_type'] for x in json.loads(output).get('streams',[])]
+            return finish('up' if 'video' in tracks and 'audio' in tracks else 'down','Дорожки: '+', '.join(tracks))
+        if kind=='mqtt':
+            # CONNECT with a random diagnostic ID, no credentials or application messages.
+            import uuid
+            cid=('monitor-'+uuid.uuid4().hex[:8]).encode();body=b'\x00\x04MQTT\x04\x02\x00\x05'+len(cid).to_bytes(2,'big')+cid
+            with socket.create_connection((ips[0],spec['port']),timeout=3) as sock:
+                sock.sendall(bytes([16,len(body)])+body);reply=sock.recv(4)
+                if len(reply)==4 and reply[:2]==b'\x20\x02':
+                    if reply[3]==0:sock.sendall(b'\xe0\x00');return finish('limited','MQTT CONNECT принят; обмен данными не проверен')
+                    return finish('limited','MQTT отвечает; для тестовой публикации нужны отдельные credentials')
+                return finish('down','Некорректный MQTT CONNACK')
         if kind=='tcp':
             with socket.create_connection((ips[0],spec['port']),timeout=3):pass
             return finish('limited','TCP-порт доступен; функции приложения не проверены')

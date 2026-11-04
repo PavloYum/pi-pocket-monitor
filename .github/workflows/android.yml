@@ -19,13 +19,25 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - run: gradle :app:assembleDebug :app:lintDebug --no-daemon
+      - name: Decode signing key
+        env:
+          SIGNING_STORE_BASE64: ${{ secrets.SIGNING_STORE_BASE64 }}
+        run: |
+          umask 077
+          printf '%s' "$SIGNING_STORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+      - run: gradle :app:assembleRelease :app:lintRelease --no-daemon
+        env:
+          SIGNING_STORE: ${{ runner.temp }}/release.jks
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
       - run: |
-          mkdir -p downloads/0.4.0
-          cp app/build/outputs/apk/debug/app-debug.apk downloads/0.4.0/pi-pocket-monitor-0.4.0-debug.apk
-          cd downloads/0.4.0
+          mkdir -p downloads/0.5.0
+          cp app/build/outputs/apk/release/app-release.apk downloads/0.5.0/pi-pocket-monitor-0.5.0-release.apk
+          cd downloads/0.5.0
           sha256sum *.apk > SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
-          name: pi-pocket-monitor-0.4.0-debug
-          path: downloads/0.4.0/
+          name: pi-pocket-monitor-0.5.0-release
+          path: downloads/0.5.0/
