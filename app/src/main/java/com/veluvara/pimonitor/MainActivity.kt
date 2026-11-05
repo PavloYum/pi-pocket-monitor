@@ -16,6 +16,7 @@ import java.util.*
 class MainActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("monitor", MODE_PRIVATE) }
     private var page=0
+    private val expandedGroups=mutableSetOf<String>()
     private var period="day"
     private var metric="cpu"
     private lateinit var content: LinearLayout
@@ -185,13 +186,57 @@ class MainActivity : Activity() {
             val services=d.optJSONArray("services")
             content.addView(text("ДОСТУПНОСТЬ СЕРВИСОВ",12f,muted,true))
             if(services==null || services.length()==0) card().addView(text("Нет результатов проверок сервисов",14f,muted))
-            else for(i in 0 until services.length()) {
-                val item=services.getJSONObject(i)
+            else {
+                val grouped=(0 until services.length()).map { services.getJSONObject(it) }.groupBy {
+                    val name=it.optString("container",it.optString("name"))
+                    when {
+                        name.startsWith("immich") -> "Immich · фото и видео"
+                        name.startsWith("n8n") && !name.contains("cloudflared") -> "n8n · автоматизация"
+                        name.startsWith("yumeiho_booking") -> "Booking · запись клиентов"
+                        name.startsWith("picall") -> "PiCall · звонки"
+                        name.startsWith("bm-") && !name.contains("cloudflared") -> "BM · приложение"
+                        name.contains("cloudflared") -> "Туннели · внешний доступ"
+                        name.startsWith("yumeiho-") || name=="visitka-dev" || name=="veluvara-site" -> "Сайты и Yumeiho"
+                        else -> "Инфраструктура и другие сервисы"
+                    }
+                }
+                val stale=age>180 || d.optBoolean("stale",true) || error.isNotEmpty()
+                grouped.forEach { (title,items) ->
+                    val block=card()
+                    val down=items.count { it.optString("status")=="down" }
+                    val up=items.count { it.optString("status")=="up" }
+                    block.addView(text(title,20f,ink,true))
+                    block.addView(text(if(stale) "Нет актуальных данных" else "${items.size} контейнеров · $up проверены · $down недоступны",14f,if(!stale && down>0) Color.parseColor("#B65B32") else muted))
+                    button(block,if(title in expandedGroups) "Свернуть ▴" else "Контейнеры и связи ▾") {
+                        if(!expandedGroups.add(title)) expandedGroups.remove(title)
+                        render()
+                    }
+                    if(title in expandedGroups) {
+                        block.addView(text("Связи через Docker-сети",16f,ink,true))
+                        block.addView(text("Общая сеть позволяет связь, но не доказывает обмен данными. Статусы ниже — результаты отдельных проверок контейнеров.",12f,muted))
+                        val members=linkedMapOf<String,MutableList<String>>()
+                        for(service in items) {
+                            val networks=service.optJSONArray("networks") ?: continue
+                            for(j in 0 until networks.length()) {
+                                val net=networks.getJSONObject(j)
+                                if(net.optBoolean("connected")) members.getOrPut(net.getString("name")) { mutableListOf() }.add(service.optString("container",service.optString("name")))
+                            }
+                        }
+                        if(members.isEmpty()) block.addView(text("Нет данных о подключённых сетях",13f,muted))
+                        members.forEach { (network,names) ->
+                            block.addView(text("◇ $network"+(if(stale) " · устарело" else ""),14f,ink,true))
+                            names.forEach { block.addView(text("    ├─ $it",13f,muted)) }
+                            val others=(0 until services.length()).map { services.getJSONObject(it) }.filter { candidate ->
+                                candidate !in items && (candidate.optJSONArray("networks")?.let { nets -> (0 until nets.length()).any { nets.getJSONObject(it).optString("name")==network && nets.getJSONObject(it).optBoolean("connected") } } ?: false)
+                            }
+                            if(others.isNotEmpty()) block.addView(text("В других блоках: "+others.joinToString { it.optString("container",it.optString("name")) },12f,muted))
+                        }
+                        for(item in items) {
                 val stale=age>180 || d.optBoolean("stale",true) || error.isNotEmpty()
                 val status=if(stale) "unknown" else item.getString("status")
                 val label=when(status) { "up"->"Доступен"; "down"->"Недоступен"; "limited"->"Частичная проверка"; else->"Нет актуальной проверки" }
                 val color=when(status) { "up"->accent; "down"->Color.parseColor("#B65B32"); else->muted }
-                card().apply {
+                card(block,color=bg).apply {
                     addView(text(item.getString("name"),18f,ink,true))
                     addView(text(label,15f,color,true))
                     addView(text(item.getString("detail"),13f,muted))
@@ -206,6 +251,9 @@ class MainActivity : Activity() {
                         val state=if(stale) "нет актуальных данных" else if(connected) "подключена" else "не подключена"
                         val netColor=if(stale) muted else if(connected) accent else Color.parseColor("#B65B32")
                         addView(text("${if(stale) "○" else if(connected) "●" else "!"} ${net.getString("name")} — $state${if(net.optBoolean("required")) " · обязательная" else ""}",13f,netColor))
+                    }
+                }
+            }
                     }
                 }
             }
@@ -240,6 +288,6 @@ class MainActivity : Activity() {
             addView(text("Разрешите уведомления и фоновую работу. После перезагрузки телефона включите мониторинг снова. Для VPN-адреса нужен Tailscale. HTTP используйте только в доверенной сети.",14f,muted))
             button(this,"Настройки Android") { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,android.net.Uri.parse("package:$packageName"))) }
         }
-        content.addView(text("Pi Pocket Monitor · 0.5.1\nДанные хранятся только на телефоне.",12f,muted))
+        content.addView(text("Pi Pocket Monitor · 0.6.0\nДанные хранятся только на телефоне.",12f,muted))
     }
 }
