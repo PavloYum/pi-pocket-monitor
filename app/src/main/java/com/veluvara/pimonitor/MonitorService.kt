@@ -44,12 +44,12 @@ class MonitorService : Service() {
     }
     private fun notification(channel:String,text:String):Notification {
         val open=PendingIntent.getActivity(this,0,Intent(this,MainActivity::class.java),PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        return Notification.Builder(this,channel).setSmallIcon(android.R.drawable.ic_menu_info_details).setContentTitle("Pi Pocket Monitor").setContentText(text).setStyle(Notification.BigTextStyle().bigText(text)).setContentIntent(open).build()
+        return Notification.Builder(this,channel).setSmallIcon(R.drawable.ic_monitor_status).setContentTitle("Pi Pocket Monitor").setContentText(text).setStyle(Notification.BigTextStyle().bigText(text)).setContentIntent(open).build()
     }
     override fun onStartCommand(intent:Intent?, flags:Int,startId:Int):Int {
         val stop=PendingIntent.getService(this,1,Intent(this,MonitorService::class.java).setAction("STOP"),PendingIntent.FLAG_IMMUTABLE)
         if(intent?.action=="STOP") { stopSelf(); return START_NOT_STICKY }
-        val n=Notification.Builder(this,"service").setSmallIcon(android.R.drawable.ic_menu_info_details).setContentTitle("Мониторинг включён").setContentText("Опрос только при разблокированном экране").setOngoing(true).addAction(Notification.Action.Builder(null,"Остановить",stop).build()).build()
+        val n=Notification.Builder(this,"service").setSmallIcon(R.drawable.ic_monitor_status).setContentTitle("Мониторинг включён").setContentText("Опрос только при разблокированном экране").setOngoing(true).addAction(Notification.Action.Builder(null,"Остановить",stop).build()).build()
         startForeground(1,n)
         active=true
         handler.removeCallbacks(tick); handler.post(tick)
